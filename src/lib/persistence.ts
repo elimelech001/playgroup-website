@@ -125,6 +125,55 @@ export async function initDataFile(): Promise<void> {
   await saveData(emptyState());
 }
 
+/**
+ * Opens the Save picker and returns the chosen handle + whether the file already has content.
+ * The caller is responsible for showing a confirmation before calling commitNewDataFile().
+ */
+export async function pickNewDataFile(): Promise<{ handle: FileSystemFileHandle; hasContent: boolean }> {
+  let handle: FileSystemFileHandle;
+  try {
+    handle = await window.showSaveFilePicker({
+      suggestedName: 'gan-data.json',
+      types: [{ description: 'Kindergarten Data File', accept: { 'application/json': ['.json'] } }],
+    });
+  } catch (err) {
+    throw new PersistenceError('write', 'File picker was cancelled or denied.', err);
+  }
+
+  let hasContent = false;
+  try {
+    const file = await handle.getFile();
+    hasContent = file.size > 0;
+  } catch { /* treat unreadable as empty */ }
+
+  return { handle, hasContent };
+}
+
+/** Writes empty state to a previously picked handle and sets it as the active file. */
+export async function commitNewDataFile(handle: FileSystemFileHandle): Promise<void> {
+  // Write data first — if this throws, the handle is never committed so the app stays clean.
+  _fileHandle = handle;
+  const json = JSON.stringify(emptyState(), null, 2);
+  let writable: FileSystemWritableFileStream;
+  try {
+    writable = await handle.createWritable({ keepExistingData: false });
+  } catch (err) {
+    _fileHandle = null;
+    throw new PersistenceError('write', 'Failed to open file for writing.', err);
+  }
+  try {
+    await writable.write(json);
+    await writable.close();
+  } catch (err) {
+    _fileHandle = null;
+    try { await writable.close(); } catch { /* ignore */ }
+    throw new PersistenceError('write', 'Failed to write data to file.', err);
+  }
+  // Data written successfully — now commit the handle references.
+  localStorage.setItem(LAST_FILE_KEY, handle.name);
+  await saveHandleToIDB(handle);
+}
+
 export async function openDataFile(): Promise<AppState> {
   let handle: FileSystemFileHandle;
 

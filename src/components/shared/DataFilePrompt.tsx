@@ -1,7 +1,8 @@
 import { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  initDataFile,
+  pickNewDataFile,
+  commitNewDataFile,
   openDataFile,
   restoreDataFile,
   getLastFileName,
@@ -16,11 +17,12 @@ interface DataFilePromptProps {
 export function DataFilePrompt({ onReady }: DataFilePromptProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Pending handle that needs overwrite confirmation
+  const [pendingHandle, setPendingHandle] = useState<FileSystemFileHandle | null>(null);
   const lastFileName = getLastFileName();
   const isFirstRun = !lastFileName;
   const primaryRef = useRef<HTMLButtonElement>(null);
 
-  // On mount: try to silently restore the previously opened file
   useEffect(() => {
     async function tryRestore() {
       try {
@@ -32,7 +34,6 @@ export function DataFilePrompt({ onReady }: DataFilePromptProps) {
         }
       } catch { /* fall through to manual prompt */ }
       setLoading(false);
-      // Focus the primary button once the prompt is visible
       setTimeout(() => primaryRef.current?.focus(), 0);
     }
     tryRestore();
@@ -47,7 +48,7 @@ export function DataFilePrompt({ onReady }: DataFilePromptProps) {
       onReady();
     } catch (err) {
       if (err instanceof PersistenceError && err.type === 'read') {
-        setError(null); // user cancelled picker — silent
+        setError(null);
       } else {
         setError(err instanceof Error ? err.message : 'Could not open file.');
       }
@@ -59,24 +60,79 @@ export function DataFilePrompt({ onReady }: DataFilePromptProps) {
   async function handleCreateFile() {
     setLoading(true);
     setError(null);
+    setPendingHandle(null);
     try {
-      await initDataFile();
-      onReady();
+      const { handle, hasContent } = await pickNewDataFile();
+      if (hasContent) {
+        setPendingHandle(handle);
+        setLoading(false);
+      } else {
+        await commitNewDataFile(handle);
+        setLoading(false);
+        onReady();
+      }
     } catch (err) {
       if (err instanceof PersistenceError && err.type === 'write') {
-        setError(null); // user cancelled picker — silent
+        setError(null);
       } else {
         setError(err instanceof Error ? err.message : 'Could not create file.');
       }
-    } finally {
       setLoading(false);
     }
+  }
+
+  async function handleConfirmOverwrite() {
+    if (!pendingHandle) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await commitNewDataFile(pendingHandle);
+      setLoading(false);
+      onReady();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not write file.');
+      setLoading(false);
+    }
+  }
+
+  function handleCancelOverwrite() {
+    setPendingHandle(null);
   }
 
   if (loading) {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center">
         <span className="animate-spin w-6 h-6 border-2 border-teal-600 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  // Overwrite confirmation screen
+  if (pendingHandle) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+        <div className="max-w-md w-full mx-4 p-8 bg-white rounded-xl shadow-sm border border-stone-200">
+          <h1 className="text-xl font-semibold text-stone-800 mb-2">Overwrite existing file?</h1>
+          <p className="text-stone-500 text-sm mb-4">
+            The file <span className="font-medium text-stone-700">{pendingHandle.name}</span> already
+            contains data. Creating a new data file here will permanently erase all existing content.
+          </p>
+          <div className="flex flex-col gap-3">
+            <Button
+              onClick={handleConfirmOverwrite}
+              className="w-full bg-rose-600 text-white hover:bg-rose-700"
+            >
+              Yes, overwrite and start fresh
+            </Button>
+            <Button
+              onClick={handleCancelOverwrite}
+              variant="outline"
+              className="w-full border-stone-300 text-stone-700"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }

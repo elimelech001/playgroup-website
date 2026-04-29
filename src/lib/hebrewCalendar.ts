@@ -146,6 +146,38 @@ export function getHebrewBirthday(dob: string): string {
   return toISODate(birthdayThisYear.greg());
 }
 
+/**
+ * Returns all Gregorian ISO dates on which a child's Hebrew birthday falls
+ * within the given date range (spanning one or more Hebrew years).
+ */
+export function getHebrewBirthdaysInRange(
+  dob: string,
+  rangeStart: string,
+  rangeEnd: string,
+): string[] {
+  const dobDate = parseDate(dob);
+  const hDob = new HDate(dobDate);
+  const dobMonth = hDob.getMonth() as HMonthValue;
+  const dobDay = hDob.getDate();
+
+  const startHYear = getHebrewYearForDate(rangeStart);
+  const endHYear = getHebrewYearForDate(rangeEnd);
+
+  const results: string[] = [];
+  for (let hy = startHYear; hy <= endHYear; hy++) {
+    try {
+      const bday = new HDate(dobDay, dobMonth, hy);
+      const iso = toISODate(bday.greg());
+      if (iso >= rangeStart && iso <= rangeEnd) {
+        results.push(iso);
+      }
+    } catch {
+      // skip invalid dates (e.g. Adar I birthday in a non-leap year)
+    }
+  }
+  return results;
+}
+
 export function getJewishHolidays(year: number): Holiday[] {
   const options: CalOptions = {
     year,
@@ -176,6 +208,38 @@ export function getJewishHolidays(year: number): Holiday[] {
 
   holidays.sort((a, b) => a.date.localeCompare(b.date));
   return holidays;
+}
+
+/**
+ * Returns the Hebrew month name(s) for a given Gregorian month.
+ * If the Gregorian month spans two Hebrew months, returns both joined with " · ".
+ */
+export function getHebrewMonthsForGregorianMonth(year: number, month: number): string {
+  const firstDay = new HDate(new Date(year, month - 1, 1));
+  const lastDayOfMonth = new Date(year, month, 0); // last day of month
+  const lastDay = new HDate(lastDayOfMonth);
+
+  const firstName = HEBREW_MONTH_NAMES[firstDay.getMonth() as HMonthValue] ?? '';
+  const lastName = HEBREW_MONTH_NAMES[lastDay.getMonth() as HMonthValue] ?? '';
+
+  const names = [...new Set([firstName, lastName])].filter(Boolean);
+  return names.join(' · ');
+}
+
+export function getHebrewMonthForDate(isoDate: string): string {
+  const date = parseDate(isoDate);
+  const hDate = new HDate(date);
+  return HEBREW_MONTH_NAMES[hDate.getMonth() as HMonthValue] ?? '';
+}
+
+export function getHebrewDayLabel(isoDate: string): string {
+  try {
+    const date = parseDate(isoDate);
+    const hDate = new HDate(date);
+    return hDate.render('he').split(' ')[0] ?? '';
+  } catch {
+    return '';
+  }
 }
 
 export function getRoshChodeshDates(year: number): RoshChodesh[] {

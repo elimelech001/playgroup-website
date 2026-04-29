@@ -188,28 +188,46 @@ async function scanFolderRecursive(
   return { name, handle, files, subfolders };
 }
 
-export async function openFile(fileHandle: FileSystemFileHandle): Promise<void> {
+export async function getFileBlob(fileHandle: FileSystemFileHandle): Promise<{ file: File; url: string }> {
   let file: File;
   try {
     file = await fileHandle.getFile();
   } catch (err) {
     throw new FileSystemError('expired', 'Could not read the file. Permission may have expired.', err);
   }
-
   const url = URL.createObjectURL(file);
-  const newTab = window.open(url, '_blank', 'noopener,noreferrer');
+  return { file, url };
+}
 
-  if (!newTab) {
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.target = '_blank';
-    anchor.rel = 'noopener noreferrer';
-    anchor.download = file.name;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
+export async function downloadFile(fileHandle: FileSystemFileHandle): Promise<void> {
+  const { file, url } = await getFileBlob(fileHandle);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = file.name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+export async function getFilePath(fileHandle: FileSystemFileHandle): Promise<string[]> {
+  const root = _directoryHandle;
+  if (!root) return [fileHandle.name];
+  try {
+    const segments = await root.resolve(fileHandle);
+    return segments ?? [fileHandle.name];
+  } catch {
+    return [fileHandle.name];
   }
+}
 
+export async function openFile(fileHandle: FileSystemFileHandle): Promise<void> {
+  const { url } = await getFileBlob(fileHandle);
+  const newTab = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!newTab) {
+    await downloadFile(fileHandle);
+    return;
+  }
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 

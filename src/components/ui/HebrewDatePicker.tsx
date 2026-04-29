@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
+import { getHebrewMonthsForGregorianMonth } from '@/lib/hebrewCalendar';
 
 interface HebrewDatePickerProps {
   id?: string;
@@ -40,15 +41,6 @@ function parseISO(iso: string): { year: number; month: number; day: number } | n
   return { year: y, month: m - 1, day: d };
 }
 
-function getHebrewMonthForGregorian(year: number, month: number): string {
-  try {
-    const hd = new HDate(new Date(year, month, 1));
-    const parts = hd.render('he').split(' ');
-    return parts[1] ?? '';
-  } catch {
-    return '';
-  }
-}
 
 function getHebrewDayLabel(year: number, month: number, day: number): string {
   try {
@@ -110,7 +102,9 @@ export function HebrewDatePicker({
   const [inputText, setInputText] = useState(value ? formatDisplay(value) : '');
   const [inputError, setInputError] = useState(false);
   const [showYearDropdown, setShowYearDropdown] = useState(false);
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const yearListRef = useRef<HTMLDivElement>(null);
+  const monthListRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Sync display text when value changes externally
@@ -123,13 +117,19 @@ export function HebrewDatePicker({
     }
   }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Scroll selected year into view when dropdown opens
   useEffect(() => {
     if (showYearDropdown && yearListRef.current) {
       const selected = yearListRef.current.querySelector('[data-selected="true"]');
       selected?.scrollIntoView({ block: 'center' });
     }
   }, [showYearDropdown]);
+
+  useEffect(() => {
+    if (showMonthDropdown && monthListRef.current) {
+      const selected = monthListRef.current.querySelector('[data-selected="true"]');
+      selected?.scrollIntoView({ block: 'center' });
+    }
+  }, [showMonthDropdown]);
 
   function prevMonth() {
     if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
@@ -177,10 +177,10 @@ export function HebrewDatePicker({
 
   const todayISO = toISODate(today.getFullYear(), today.getMonth(), today.getDate());
   const hebrewLabel = value ? getFullHebrewDate(value) : '';
-  const hebrewMonthHeader = getHebrewMonthForGregorian(viewYear, viewMonth);
+  const hebrewMonthHeader = getHebrewMonthsForGregorianMonth(viewYear, viewMonth + 1);
 
   return (
-    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setShowYearDropdown(false); onBlur?.(); } }}>
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setShowYearDropdown(false); setShowMonthDropdown(false); onBlur?.(); } }}>
       <PopoverTrigger asChild>
         {/* Typing directly in this input is the primary way to enter a date */}
         <div
@@ -244,24 +244,62 @@ export function HebrewDatePicker({
           </button>
 
           <div className="flex items-center gap-1">
-            <span className="text-sm font-semibold text-stone-800">{MONTH_NAMES[viewMonth]}</span>
-
-            {/* Year button — opens floating dropdown that does NOT push layout */}
+            {/* Month button with dropdown */}
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setShowYearDropdown((v) => !v)}
+                onClick={() => { setShowMonthDropdown((v) => !v); setShowYearDropdown(false); }}
+                className="text-sm font-semibold text-stone-800 hover:text-teal-700 transition-colors px-0.5"
+                aria-label="Select month"
+              >
+                {MONTH_NAMES[viewMonth]}
+              </button>
+              {showMonthDropdown && (
+                <div
+                  ref={monthListRef}
+                  className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-50 max-h-48 w-28 overflow-y-auto rounded border border-stone-200 bg-white shadow-lg"
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  {MONTH_NAMES.map((name, idx) => (
+                    <button
+                      key={name}
+                      type="button"
+                      data-selected={idx === viewMonth}
+                      onClick={() => { setViewMonth(idx); setShowMonthDropdown(false); }}
+                      className={cn(
+                        'block w-full text-left px-3 py-1 text-sm hover:bg-stone-100',
+                        idx === viewMonth && 'bg-teal-50 text-teal-800 font-semibold',
+                      )}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Hebrew month inline */}
+            {hebrewMonthHeader && (
+              <span className="text-xs text-stone-400 font-medium" dir="rtl">
+                · {hebrewMonthHeader}
+              </span>
+            )}
+
+            {/* Year button with dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => { setShowYearDropdown((v) => !v); setShowMonthDropdown(false); }}
                 className="text-sm font-semibold text-teal-700 underline-offset-2 hover:underline px-0.5"
                 aria-label="Select year"
               >
                 {viewYear}
               </button>
-
               {showYearDropdown && (
                 <div
                   ref={yearListRef}
                   className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-50 max-h-48 w-20 overflow-y-auto rounded border border-stone-200 bg-white shadow-lg"
-                  onMouseDown={(e) => e.preventDefault()} // prevent blur on input
+                  onMouseDown={(e) => e.preventDefault()}
                 >
                   {YEAR_OPTIONS.map((y) => (
                     <button
@@ -290,15 +328,6 @@ export function HebrewDatePicker({
           >
             <ChevronRight className="h-4 w-4" />
           </button>
-        </div>
-
-        {/* Hebrew month label — fixed height so it never shifts layout */}
-        <div className="text-center h-4">
-          {hebrewMonthHeader && (
-            <span className="text-[11px] text-stone-400 leading-none" dir="rtl">
-              {hebrewMonthHeader}
-            </span>
-          )}
         </div>
 
         {/* Day-of-week headers */}

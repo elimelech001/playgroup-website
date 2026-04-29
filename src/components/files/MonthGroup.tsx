@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { ChevronRight, FileText, Table2, Image, File, ExternalLink } from 'lucide-react';
-import * as fileSystem from '@/lib/fileSystem';
+import { ChevronRight, FileText, Table2, Image, File } from 'lucide-react';
 import type { FileEntry } from '@/lib/fileSystem';
+import { FilePreviewModal } from './FilePreviewModal';
 
 interface MonthGroupProps {
   label: string;
@@ -31,20 +31,7 @@ function getFileIcon(name: string) {
 
 export function MonthGroup({ label, files, defaultExpanded = true, onToggle }: MonthGroupProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const [openError, setOpenError] = useState<string | null>(null);
-
-  async function handleOpen(entry: FileEntry) {
-    setOpenError(null);
-    try {
-      await fileSystem.openFile(entry.handle);
-    } catch (err) {
-      if (err instanceof fileSystem.FileSystemError) {
-        setOpenError('Could not open file. Try reconnecting your folder.');
-      } else {
-        setOpenError('An unexpected error occurred.');
-      }
-    }
-  }
+  const [previewEntry, setPreviewEntry] = useState<FileEntry | null>(null);
 
   return (
     <div className="border border-stone-200 rounded-lg overflow-hidden">
@@ -74,34 +61,28 @@ export function MonthGroup({ label, files, defaultExpanded = true, onToggle }: M
                 key={entry.name}
                 role="button"
                 tabIndex={0}
-                aria-label={`Open ${entry.name}`}
+                aria-label={`Preview ${entry.name}`}
                 className="flex items-center gap-3 px-4 py-2.5 hover:bg-stone-50 cursor-pointer group transition-colors"
-                onClick={() => handleOpen(entry)}
+                onClick={() => setPreviewEntry(entry)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); handleOpen(entry); }
+                  if (e.key === 'Enter') { e.preventDefault(); setPreviewEntry(entry); }
                 }}
               >
                 {getFileIcon(entry.name)}
                 <span className="flex-1 text-sm text-stone-800 truncate" title={entry.name}>
                   {entry.name}
                 </span>
-                <span className="text-xs text-stone-400 shrink-0 tabular-nums mr-2">
+                <span className="text-xs text-stone-400 shrink-0 tabular-nums">
                   {entry.lastModified.toLocaleDateString()}
                 </span>
-                <ExternalLink
-                  className="w-4 h-4 text-stone-300 group-hover:text-teal-600 transition-colors shrink-0"
-                  aria-hidden="true"
-                />
               </li>
             ))
           )}
         </ul>
       )}
 
-      {openError && (
-        <p className="text-rose-600 text-sm px-4 py-2" role="alert">
-          {openError}
-        </p>
+      {previewEntry && (
+        <FilePreviewModal entry={previewEntry} onClose={() => setPreviewEntry(null)} />
       )}
     </div>
   );

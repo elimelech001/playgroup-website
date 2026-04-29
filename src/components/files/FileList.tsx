@@ -3,6 +3,7 @@ import { Search, X } from 'lucide-react';
 import { FolderPrompt } from '@/components/shared/FolderPrompt';
 import { MonthGroup } from './MonthGroup';
 import { FolderTree } from './FolderTree';
+import { FilePreviewModal } from './FilePreviewModal';
 import * as fileSystem from '@/lib/fileSystem';
 import type { FileEntry, FolderNode } from '@/lib/fileSystem';
 import { useStore } from '@/store';
@@ -258,40 +259,35 @@ function SearchResultRow({
   path: string[];
   query: string;
 }) {
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleOpen() {
-    setError(null);
-    try {
-      await fileSystem.openFile(entry.handle);
-    } catch {
-      setError('Could not open file. Try reconnecting your folder.');
-    }
-  }
+  const [previewEntry, setPreviewEntry] = useState<FileEntry | null>(null);
 
   return (
-    <li
-      role="button"
-      tabIndex={0}
-      aria-label={`Open ${entry.name}`}
-      className="flex items-center gap-3 px-4 py-2.5 hover:bg-stone-50 cursor-pointer group transition-colors"
-      onClick={handleOpen}
-      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleOpen(); } }}
-    >
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-stone-800 truncate">
-          <HighlightMatch text={entry.name} query={query} />
-        </p>
-        {path.length > 0 && (
-          <p className="text-xs text-stone-400 truncate mt-0.5">
-            {path.join(' / ')}
+    <>
+      <li
+        role="button"
+        tabIndex={0}
+        aria-label={`Preview ${entry.name}`}
+        className="flex items-center gap-3 px-4 py-2.5 hover:bg-stone-50 cursor-pointer group transition-colors"
+        onClick={() => setPreviewEntry(entry)}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setPreviewEntry(entry); } }}
+      >
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-stone-800 truncate">
+            <HighlightMatch text={entry.name} query={query} />
           </p>
-        )}
-      </div>
-      <span className="text-xs text-stone-400 shrink-0 tabular-nums">
-        {entry.lastModified.toLocaleDateString()}
-      </span>
-      {error && <span className="text-xs text-rose-500 shrink-0">{error}</span>}
-    </li>
+          {path.length > 0 && (
+            <p className="text-xs text-stone-400 truncate mt-0.5">
+              {path.join(' / ')}
+            </p>
+          )}
+        </div>
+        <span className="text-xs text-stone-400 shrink-0 tabular-nums">
+          {entry.lastModified.toLocaleDateString()}
+        </span>
+      </li>
+      {previewEntry && (
+        <FilePreviewModal entry={previewEntry} onClose={() => setPreviewEntry(null)} />
+      )}
+    </>
   );
 }
